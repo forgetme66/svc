@@ -1,0 +1,6 @@
+.DS_Store
+dist
+dist-ssr
+coverage
+*.local
+node_modules
