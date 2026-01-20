@@ -115,7 +115,18 @@ def add_student():
             logger.warning(f'用户 {student_id} 不是学生，user_type={student.user_type}')
             return jsonify({'code': 400, 'message': '该用户不是学生'}), 400
         
-        # 检查是否已经添加过
+        # 检查该学生是否已经被任何教师管理
+        any_existing = TeacherStudent.query.filter_by(student_id=student_id).first()
+        if any_existing:
+            existing_teacher = User.query.get(any_existing.teacher_id)
+            existing_teacher_name = existing_teacher.real_name or existing_teacher.username if existing_teacher else "未知教师"
+            logger.warning(f'学生 {student_id} 已经被教师 {any_existing.teacher_id}({existing_teacher_name}) 管理')
+            return jsonify({
+                'code': 400, 
+                'message': f'该学生已经被教师"{existing_teacher_name}"管理，一个学生只能被一个教师管理'
+            }), 400
+
+        # 检查是否已经添加过（冗余检查，但保留以防万一）
         existing = TeacherStudent.query.filter_by(
             teacher_id=teacher_id,
             student_id=student_id
