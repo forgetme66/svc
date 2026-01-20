@@ -321,3 +321,53 @@ def logout():
         'code': 200,
         'message': '登出成功'
     }), 200
+
+@auth_bp.route('/change-password', methods=['POST'])
+@jwt_required()
+def change_password():
+    """修改密码"""
+    try:
+        user_id = int(get_jwt_identity())
+        user = User.query.get(user_id)
+        
+        if not user:
+            return jsonify({'code': 404, 'message': '用户不存在'}), 404
+        
+        data = request.get_json()
+        
+        if not data or not data.get('old_password') or not data.get('new_password'):
+            return jsonify({'code': 400, 'message': '旧密码和新密码不能为空'}), 400
+        
+        old_password = data.get('old_password')
+        new_password = data.get('new_password')
+        confirm_password = data.get('confirm_password')
+        
+        # 验证旧密码
+        if not user.check_password(old_password):
+            return jsonify({'code': 401, 'message': '旧密码错误'}), 401
+        
+        # 验证新密码和确认密码一致
+        if new_password != confirm_password:
+            return jsonify({'code': 400, 'message': '新密码和确认密码不一致'}), 400
+        
+        # 验证新密码是否与旧密码相同
+        if old_password == new_password:
+            return jsonify({'code': 400, 'message': '新密码不能与旧密码相同'}), 400
+        
+        # 验证新密码强度
+        is_valid, msg = validate_password(new_password)
+        if not is_valid:
+            return jsonify({'code': 400, 'message': msg}), 400
+        
+        # 更新密码
+        user.set_password(new_password)
+        db.session.commit()
+        
+        return jsonify({
+            'code': 200,
+            'message': '密码修改成功'
+        }), 200
+    
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'code': 500, 'message': f'服务器错误: {str(e)}'}), 500

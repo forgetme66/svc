@@ -22,6 +22,13 @@ export const authAPI = {
   updateProfile(data) {
     return api.put('/auth/profile', data)
   },
+  changePassword(oldPassword, newPassword, confirmPassword) {
+    return api.post('/auth/change-password', {
+      old_password: oldPassword,
+      new_password: newPassword,
+      confirm_password: confirmPassword
+    })
+  },
   logout() {
     return api.post('/auth/logout')
   }

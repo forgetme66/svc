@@ -54,9 +54,10 @@
 <script setup>
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { authAPI } from '@/api/auth'
 import { useAuthStore } from '@/stores/auth'
+import { messagesAPI } from '@/api/messages'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -89,6 +90,7 @@ const handleLogin = async () => {
       authStore.setTokens(access_token, refresh_token)
       authStore.setUser(user)
       ElMessage.success('登录成功')
+      // 直接跳转到首页，在首页检查消息
       router.push('/dashboard')
     } else {
       ElMessage.error(response.data.message || '登录失败')

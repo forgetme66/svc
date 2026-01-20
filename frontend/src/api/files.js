@@ -2,11 +2,17 @@ import api from './index'
 
 export const filesAPI = {
   // 上传文件
-  uploadFile(file, description = '', isPublic = false) {
+  uploadFile(file, description = '', isPublic = false, documentType = '', submissionStage = '') {
     const formData = new FormData()
     formData.append('file', file)
     formData.append('description', description)
     formData.append('is_public', isPublic)
+    if (documentType) {
+      formData.append('document_type', documentType)
+    }
+    if (submissionStage) {
+      formData.append('submission_stage', submissionStage)
+    }
     
     return api.post('/files/upload', formData)
   },

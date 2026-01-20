@@ -79,6 +79,12 @@ def upload_file():
         
         logger.info(f'Description: {description}, Is public: {is_public}')
         
+        # 获取毕业设计相关字段
+        document_type = request.form.get('document_type')  # proposal, outline, draft, final
+        submission_stage = request.form.get('submission_stage')  # early, mid, final
+        
+        logger.info(f'Document type: {document_type}, Submission stage: {submission_stage}')
+        
         # 生成唯一的文件名
         original_filename = secure_filename(file.filename)
         file_ext = original_filename.rsplit('.', 1)[1].lower() if '.' in original_filename else 'bin'
@@ -92,6 +98,7 @@ def upload_file():
         logger.info(f'File saved successfully')
         
         # 创建文件记录
+        from datetime import datetime
         file_record = File(
             user_id=user_id,
             filename=original_filename,
@@ -99,7 +106,11 @@ def upload_file():
             file_type=file_ext,
             file_size=file_size,
             description=description,
-            is_public=is_public
+            is_public=is_public,
+            document_type=document_type,
+            submission_stage=submission_stage,
+            is_submitted=True,
+            submitted_at=datetime.utcnow() if document_type else None
         )
         
         db.session.add(file_record)

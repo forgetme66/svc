@@ -43,6 +43,54 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
+    path: '/teacher-management',
+    name: 'TeacherManagement',
+    component: () => import('@/pages/TeacherManagement.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/student-documents',
+    name: 'StudentDocuments',
+    component: () => import('@/pages/StudentDocuments.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/admin-management',
+    name: 'AdminManagement',
+    component: () => import('@/pages/AdminManagement.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/inbox',
+    name: 'Inbox',
+    component: () => import('@/pages/Inbox.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/profile',
+    name: 'Profile',
+    component: () => import('@/pages/Profile.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/review-teacher',
+    name: 'ReviewTeacher',
+    component: () => import('@/pages/ReviewTeacher.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/review-statistics',
+    name: 'ReviewStatistics',
+    component: () => import('@/pages/ReviewStatistics.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/teacher-ratings-display',
+    name: 'TeacherRatingsDisplay',
+    component: () => import('@/pages/TeacherRatingsDisplay.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
     path: '/debug',
     name: 'SystemDebug',
     component: () => import('@/pages/SystemDebug.vue')

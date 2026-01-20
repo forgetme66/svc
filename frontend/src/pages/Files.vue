@@ -1,19 +1,58 @@
 <template>
   <div class="files-container">
     <el-container>
-      <el-aside width="200px" class="aside">
-        <el-menu router :default-active="activeMenu">
-          <el-menu-item index="/dashboard" route="/dashboard">
-            <template #title>首页</template>
-          </el-menu-item>
-          <el-menu-item index="/files" route="/files">
-            <template #title>文件管理</template>
-          </el-menu-item>
-          <el-menu-item index="/questions" route="/questions">
-            <template #title>问题中心</template>
-          </el-menu-item>
-        </el-menu>
-      </el-aside>
+      <el-header class="header">
+        <div class="header-left">
+          <h1>文件管理</h1>
+        </div>
+        <div class="header-right">
+          <el-tooltip content="消息箱" placement="bottom">
+            <el-badge :value="unreadCount > 0 ? unreadCount : ''" class="header-icon" @click="goToInbox">
+              <el-icon class="icon-button"><Notification /></el-icon>
+            </el-badge>
+          </el-tooltip>
+          <el-dropdown>
+            <el-icon class="user-icon"><User /></el-icon>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item>{{ authStore.user?.username }}</el-dropdown-item>
+                <el-dropdown-item divided @click="goToProfile">个人信息</el-dropdown-item>
+                <el-dropdown-item @click="handleLogout">退出登录</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </div>
+      </el-header>
+
+      <el-container>
+        <el-aside width="200px" class="aside">
+          <el-menu router :default-active="activeMenu">
+            <el-menu-item index="/dashboard" route="/dashboard">
+              <template #title>首页</template>
+            </el-menu-item>
+            <el-menu-item v-if="!isTeacher" index="/files" route="/files">
+              <template #title>文件管理</template>
+            </el-menu-item>
+            <el-menu-item v-if="isTeacher || isStudent" index="/review-teacher" route="/review-teacher">
+              <template #title>教师评价</template>
+            </el-menu-item>
+            <el-menu-item v-if="isTeacher" index="/teacher-management" route="/teacher-management">
+              <template #title>学生管理</template>
+            </el-menu-item>
+            <!-- <el-menu-item v-if="isTeacher" index="/student-documents" route="/student-documents">
+              <template #title>毕设评阅</template>
+            </el-menu-item> -->
+            <el-menu-item v-if="isAdmin" index="/admin-management" route="/admin-management">
+              <template #title>用户管理</template>
+            </el-menu-item>
+            <el-menu-item index="/teacher-ratings-display" route="/teacher-ratings-display">
+              <template #title>评价浏览</template>
+            </el-menu-item>
+            <el-menu-item index="/questions" route="/questions">
+              <template #title>问题中心</template>
+            </el-menu-item>
+          </el-menu>
+        </el-aside>
 
       <el-main>
         <!-- 文件上传卡片 -->
@@ -66,6 +105,31 @@
                     <el-switch v-model="uploadForm.isPublic" />
                   </el-form-item>
 
+                  <el-form-item label="文档类型">
+                    <el-select
+                      v-model="uploadForm.documentType"
+                      placeholder="请选择文档类型（可选）"
+                      clearable
+                    >
+                      <el-option label="选题报告" value="proposal" />
+                      <el-option label="大纲" value="outline" />
+                      <el-option label="初稿" value="draft" />
+                      <el-option label="终稿" value="final" />
+                    </el-select>
+                  </el-form-item>
+
+                  <el-form-item label="上交阶段">
+                    <el-select
+                      v-model="uploadForm.submissionStage"
+                      placeholder="请选择上交阶段（可选）"
+                      clearable
+                    >
+                      <el-option label="早期" value="early" />
+                      <el-option label="中期" value="mid" />
+                      <el-option label="最终" value="final" />
+                    </el-select>
+                  </el-form-item>
+
                   <el-button
                     type="primary"
                     @click="handleUpload"
@@ -85,7 +149,7 @@
           <template #header>
             <div class="card-header">
               <span>文件列表</span>
-              <el-input-group style="width: 300px">
+              <div class="search-group" style="width: 300px; display: flex; gap: 8px">
                 <el-input
                   v-model="searchKeyword"
                   placeholder="搜索文件名"
@@ -93,7 +157,7 @@
                   @keyup.enter="handleSearch"
                 />
                 <el-button @click="handleSearch" type="primary">搜索</el-button>
-              </el-input-group>
+              </div>
             </div>
           </template>
 
@@ -139,6 +203,24 @@
               </template>
             </el-table-column>
 
+            <el-table-column label="文档类型" width="100">
+              <template #default="{ row }">
+                <el-tag v-if="row.document_type" type="warning">
+                  {{ getDocumentTypeLabel(row.document_type) }}
+                </el-tag>
+                <span v-else style="color: #909399">-</span>
+              </template>
+            </el-table-column>
+
+            <el-table-column label="上交阶段" width="100">
+              <template #default="{ row }">
+                <el-tag v-if="row.submission_stage" type="info">
+                  {{ getSubmissionStageLabel(row.submission_stage) }}
+                </el-tag>
+                <span v-else style="color: #909399">-</span>
+              </template>
+            </el-table-column>
+
             <el-table-column label="操作" width="180" fixed="right">
               <template #default="{ row }">
                 <el-button
@@ -174,27 +256,43 @@
           />
         </el-card>
       </el-main>
-    </el-container>
-  </div>
-</template>
+        </el-container>
+      </el-container>
+    </div>
+  </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
+import { authAPI } from '@/api/auth'
 import { filesAPI } from '@/api/files'
-import { UploadFilled, Picture, Document } from '@element-plus/icons-vue'
+import { messagesAPI } from '@/api/messages'
+import { UploadFilled, Picture, Document, ArrowDown, Notification, User } from '@element-plus/icons-vue'
 
+const router = useRouter()
 const authStore = useAuthStore()
 const activeMenu = ref('/files')
 const uploadRef = ref()
+const unreadCount = ref(0)
 
+// 检查是否是教师
+const isTeacher = computed(() => authStore.user?.user_type === 'teacher')
+
+// 检查是否是管理员
+const isAdmin = computed(() => authStore.user?.user_type === 'admin')
+
+// 检查是否为学生
+const isStudent = computed(() => authStore.user?.user_type === 'student')
 // 上传相关
 const uploading = ref(false)
 const selectedFile = ref(null)
 const uploadForm = ref({
   description: '',
-  isPublic: false
+  isPublic: false,
+  documentType: '',
+  submissionStage: ''
 })
 
 // 文件列表相关
@@ -220,14 +318,16 @@ const handleUpload = async () => {
     const response = await filesAPI.uploadFile(
       selectedFile.value,
       uploadForm.value.description,
-      uploadForm.value.isPublic
+      uploadForm.value.isPublic,
+      uploadForm.value.documentType,
+      uploadForm.value.submissionStage
     )
 
     if (response.data.code === 201) {
       ElMessage.success('文件上传成功')
       uploadRef.value?.clearFiles()
       selectedFile.value = null
-      uploadForm.value = { description: '', isPublic: false }
+      uploadForm.value = { description: '', isPublic: false, documentType: '', submissionStage: '' }
       await loadFiles()
     } else {
       ElMessage.error(response.data.message || '上传失败')
@@ -354,14 +454,125 @@ const isImageFile = (fileType) => {
   return ['jpg', 'jpeg', 'png', 'gif'].includes(fileType)
 }
 
+const getDocumentTypeLabel = (type) => {
+  const labels = {
+    'proposal': '选题报告',
+    'outline': '大纲',
+    'draft': '初稿',
+    'final': '终稿'
+  }
+  return labels[type] || type
+}
+
+const getSubmissionStageLabel = (stage) => {
+  const labels = {
+    'early': '早期',
+    'mid': '中期',
+    'final': '最终'
+  }
+  return labels[stage] || stage
+}
+
+const goToProfile = () => {
+  router.push('/profile')
+}
+
+const handleLogout = async () => {
+  try {
+    await authAPI.logout()
+    authStore.clearAuth()
+    router.push('/login')
+  } catch (error) {
+    console.error('Logout error:', error)
+    authStore.clearAuth()
+    router.push('/login')
+  }
+}
+
+// 导航到消息箱
+const goToInbox = () => {
+  router.push('/inbox')
+}
+
+// 加载未读消息数
+const loadUnreadCount = async () => {
+  try {
+    const response = await messagesAPI.getUnreadCount()
+    if (response.data.code === 200) {
+      unreadCount.value = response.data.data.unread
+    }
+  } catch (error) {
+    console.error('Get unread count error:', error)
+  }
+}
+
 // 初始化加载
-loadFiles()
+onMounted(() => {
+  loadFiles()
+  loadUnreadCount()
+})
 </script>
 
 <style scoped lang="scss">
 .files-container {
-  min-height: 100vh;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
   background-color: #fafafa;
+
+  :deep(.el-container) {
+    height: 100%;
+  }
+
+  .header {
+    background-color: #667eea;
+    color: white;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 20px;
+
+    .header-left h1 {
+      margin: 0;
+      font-size: 24px;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+
+      .header-icon {
+        cursor: pointer;
+        font-size: 20px;
+        transition: all 0.3s;
+
+        .icon-button {
+          color: white;
+          transition: transform 0.3s;
+
+          &:hover {
+            transform: scale(1.2);
+          }
+        }
+
+        :deep(.el-badge__content) {
+          background-color: #f56c6c;
+        }
+      }
+
+      .user-icon {
+        cursor: pointer;
+        font-size: 24px;
+        color: white;
+        transition: transform 0.3s;
+
+        &:hover {
+          transform: scale(1.1);
+        }
+      }
+    }
+  }
 
   .aside {
     background-color: #f5f5f5;
@@ -370,6 +581,7 @@ loadFiles()
 
   :deep(.el-main) {
     padding: 20px;
+    overflow-y: auto;
   }
 
   .upload-card {
