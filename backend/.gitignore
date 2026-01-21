@@ -19,10 +19,8 @@ wheels/
 .installed.cfg
 *.egg
 .env
-.venv
 env/
-venv/
 ENV/
 .vscode
 .idea
-*.db
+frontend/node_modules

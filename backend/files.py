@@ -32,7 +32,7 @@ def upload_file():
     """上传文件"""
     try:
         logger.info('File upload started')
-        user_id = int(get_jwt_identity())  # JWT identity是字符串，转换为整数
+        user_id = get_jwt_identity()
         logger.info(f'User ID: {user_id}')
         user = User.query.get(user_id)
         
@@ -133,7 +133,7 @@ def upload_file():
 def list_files():
     """获取用户的文件列表"""
     try:
-        user_id = int(get_jwt_identity())  # JWT identity是字符串，转换为整数
+        user_id = get_jwt_identity()
         user = User.query.get(user_id)
         
         if not user:

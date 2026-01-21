@@ -42,6 +42,29 @@ const routes = [
     component: () => import('@/pages/Files.vue'),
     meta: { requiresAuth: true }
   },
+
+  {
+    path: '/questions',
+    name: 'QuestionCenter',
+    component: () => import('@/pages/TeacherQuestion.vue'), // 默认为学生视图
+    meta: { requiresAuth: true },
+    beforeEnter: (to, from, next) => {
+      const authStore = useAuthStore();
+      if (authStore.user?.user_type === 'teacher') {
+        // 如果是教师，重定向到教师专用的问题仪表盘
+        next({ name: 'TeacherDashboard' });
+      } else {
+        next();
+      }
+    }
+  },
+  {
+    path: '/teacher/dashboard',
+    name: 'TeacherDashboard',
+    component: () => import('@/pages/TeacherDashboard.vue'),
+    meta: { requiresAuth: true, roles: ['teacher'] }
+  },
+
   {
     path: '/teacher-management',
     name: 'TeacherManagement',

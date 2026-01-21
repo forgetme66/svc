@@ -1,14 +1,17 @@
-import os
 from flask import Flask
+import os
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
+from flask_migrate import Migrate
 from config import config
-from models import db, User
+from models import db, User, File, Question, PasswordReset
 from auth import auth_bp
 from files import files_bp
+from questions import questions_bp
 from teacher import teacher_bp
 
 def create_app(config_name=None):
+    print("Attempting to create Flask app...")
     """应用工厂函数"""
     
     if config_name is None:
@@ -19,12 +22,14 @@ def create_app(config_name=None):
     
     # 初始化扩展
     db.init_app(app)
+    Migrate(app, db)
     CORS(app, resources={r"/api/*": {"origins": "*"}})
     JWTManager(app)
     
     # 注册蓝图
     app.register_blueprint(auth_bp)
     app.register_blueprint(files_bp)
+    app.register_blueprint(questions_bp)
     app.register_blueprint(teacher_bp)
     
     # 健康检查端点
@@ -69,5 +74,10 @@ def create_default_admin():
         print('✓ 管理员账户已存在')
 
 if __name__ == '__main__':
-    app = create_app()
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    try:
+        app = create_app()
+        app.run(debug=True, host='0.0.0.0', port=5000)
+    except Exception as e:
+        import traceback
+        print(f"FATAL: Error during app startup: {e}")
+        traceback.print_exc()

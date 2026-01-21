@@ -26,6 +26,11 @@ class User(db.Model):
     
     # 关系
     files = db.relationship('File', backref=db.backref('owner', lazy=True), foreign_keys='File.user_id')
+    questions = db.relationship('Question', backref=db.backref('author', lazy=True), foreign_keys='Question.user_id')
+    
+    # 新增：指导教师关联
+    guidance_teacher_id = db.Column(db.Integer, db.ForeignKey('users.id'))
+    guidance_teacher = db.relationship('User', remote_side=[id], backref=db.backref('students', lazy='dynamic'))
     
     def set_password(self, password):
         """设置密码"""
@@ -37,6 +42,11 @@ class User(db.Model):
     
     def to_dict(self):
         """转换为字典"""
+        # 新增：UTC转北京时间
+        from datetime import timedelta
+        created_at_local = self.created_at + timedelta(hours=8) if self.created_at else None
+        updated_at_local = self.updated_at + timedelta(hours=8) if self.updated_at else None
+        
         return {
             'id': self.id,
             'username': self.username,
@@ -49,8 +59,11 @@ class User(db.Model):
             'major': self.major,
             'phone': self.phone,
             'is_active': self.is_active,
-            'created_at': self.created_at.isoformat(),
-            'updated_at': self.updated_at.isoformat()
+            # 核心修改：格式化时间为前端易解析的格式
+            'created_at': created_at_local.strftime('%Y-%m-%d %H:%M:%S') if created_at_local else '',
+            'updated_at': updated_at_local.strftime('%Y-%m-%d %H:%M:%S') if updated_at_local else '',
+            # 可选：添加register_time别名，适配前端字段名
+            'register_time': created_at_local.strftime('%Y-%m-%d %H:%M:%S') if created_at_local else ''
         }
     
     def __repr__(self):
@@ -95,6 +108,7 @@ class File(db.Model):
             'file_size': self.file_size,
             'description': self.description,
             'is_public': self.is_public,
+            'owner': self.owner.real_name if self.owner else '',
             'document_type': self.document_type,
             'submission_stage': self.submission_stage,
             'teacher_feedback': self.teacher_feedback,
@@ -112,6 +126,135 @@ class File(db.Model):
         return f'<File {self.filename}>'
 
 
+class Question(db.Model):
+    """问题模型，作为对话的主题"""
+    __tablename__ = 'questions'
+
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(200), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    teacher_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)  # 允许为空
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    last_updated_by_student = db.Column(db.DateTime, default=datetime.utcnow)
+    last_updated_by_teacher = db.Column(db.DateTime, nullable=True)
+
+    # 关系
+    teacher = db.relationship('User', foreign_keys='Question.teacher_id', backref=db.backref('assigned_questions', lazy='dynamic'))
+    messages = db.relationship('Message', backref='question', cascade="all, delete-orphan")
+
+    def get_dynamic_status(self, current_user_id):
+        if not self.messages:
+            return "未知"
+
+        # 确保消息按时间排序
+        sorted_messages = sorted(self.messages, key=lambda m: m.created_at)
+        last_message = sorted_messages[-1]
+        
+        # 判断当前用户角色（这需要数据库查询，但为了简化调用签名，我们在内部做）
+        # 注意：这里可能会有性能问题，但在小规模应用中可接受
+        # 更好的做法是从外部传入 current_user 对象
+        # User 类在当前文件中定义，直接使用即可
+        current_user = User.query.get(current_user_id)
+        if not current_user:
+            return "未知"
+            
+        is_teacher = (current_user.user_type == 'teacher')
+        
+        # 检查是否有未读消息（针对当前用户）
+        # 如果是老师，关注来自学生的未读消息
+        # 如果是学生，关注来自老师的未读消息
+        has_unread_for_me = any(not m.is_read for m in self.messages if m.sender_id != current_user_id)
+
+        if is_teacher:
+            # --- 教师视角状态 ---
+            if has_unread_for_me:
+                return "待回答" # 有学生的新消息
+            
+            # 如果最后一条消息是学生发的，且没有未读（这在逻辑上有点冲突，除非已读但未回），通常算待回答
+            if last_message.sender.user_type == 'student':
+                return "待回答"
+            
+            # 如果最后一条是老师发的
+            if last_message.sender.user_type == 'teacher':
+                return "已回复"
+                
+        else:
+            # --- 学生视角状态 ---
+            if has_unread_for_me:
+                return "待查看" # 老师回复了
+            
+            if last_message.sender.user_type == 'student':
+                return "等待回答"
+            elif last_message.sender.user_type == 'teacher':
+                return "已回复" # 已查看
+        
+        return "开放中"
+
+    def to_dict(self, current_user_id=None):
+        """基本序列化，不含消息列表"""
+        
+        status = self.get_dynamic_status(current_user_id) if current_user_id else "未知"
+
+        return {
+            'id': self.id,
+            'title': self.title,
+            'user_id': self.user_id,
+            'author_name': self.author.real_name if self.author else '未知用户',
+            'teacher_id': self.teacher_id,
+            'teacher_name': self.teacher.real_name if self.teacher else '待分配',
+            'created_at': self.created_at.isoformat() if self.created_at else '',
+            'status': status,
+        }
+
+    def to_dict_with_messages(self, current_user_id=None):
+        """序列化问题，并包含完整的消息列表和作者信息"""
+        question_dict = self.to_dict(current_user_id=current_user_id)
+        # 在Python端对消息进行排序
+        sorted_messages = sorted(self.messages, key=lambda m: m.created_at)
+        question_dict['messages'] = [message.to_dict() for message in sorted_messages]
+        # 补充完整的作者信息
+        if self.author:
+            question_dict['author'] = self.author.to_dict()
+        return question_dict
+
+    def __repr__(self):
+        return f'<Question {self.title}>'
+
+
+class Message(db.Model):
+    """对话消息模型"""
+    __tablename__ = 'messages'
+
+    id = db.Column(db.Integer, primary_key=True)
+    question_id = db.Column(db.Integer, db.ForeignKey('questions.id'), nullable=False, index=True)
+    sender_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    is_read = db.Column(db.Boolean, default=False, nullable=False, server_default='0')
+
+    # 关系
+    sender = db.relationship('User', backref='sent_messages')
+
+    def to_dict(self):
+        """转换为字典"""
+        sender_name = ''
+        if self.sender:
+            # 优先用真实姓名，否则用用户名，确保总有一个有效名字
+            sender_name = self.sender.real_name or self.sender.username
+
+        return {
+            'id': self.id,
+            'question_id': self.question_id,
+            'sender_id': self.sender_id,
+            'sender_name': sender_name,
+            'sender_user_type': self.sender.user_type if self.sender else '',
+            'content': self.content,
+            'created_at': self.created_at.isoformat() if self.created_at else '',
+            'is_read': self.is_read
+        }
+
+    def __repr__(self):
+        return f'<Message {self.id} in Question {self.question_id}>'
 class TeacherStudent(db.Model):
     """教师-学生关系表"""
     __tablename__ = 'teacher_students'
@@ -163,63 +306,6 @@ class PasswordReset(db.Model):
         return f'<PasswordReset user_id={self.user_id}>'
 
 
-class Message(db.Model):
-    """系统消息/公告"""
-    __tablename__ = 'messages'
-
-    id = db.Column(db.Integer, primary_key=True)
-    sender_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
-    content = db.Column(db.Text, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-    sender = db.relationship('User', foreign_keys=[sender_id], backref=db.backref('sent_messages', lazy=True))
-
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'sender_id': self.sender_id,
-            'sender_username': self.sender.username if self.sender else None,
-            'content': self.content,
-            'created_at': self.created_at.isoformat()
-        }
-
-
-class MessageRecipient(db.Model):
-    """消息接收者与已读状态"""
-    __tablename__ = 'message_recipients'
-
-    id = db.Column(db.Integer, primary_key=True)
-    message_id = db.Column(db.Integer, db.ForeignKey('messages.id'), nullable=False)
-    recipient_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    is_read = db.Column(db.Boolean, default=False)
-    read_at = db.Column(db.DateTime)
-
-    message = db.relationship('Message', foreign_keys=[message_id], backref=db.backref('recipients', lazy=True))
-    recipient = db.relationship('User', foreign_keys=[recipient_id], backref=db.backref('inbox', lazy=True))
-
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'message_id': self.message_id,
-            'recipient_id': self.recipient_id,
-            'sender_id': self.message.sender_id if self.message else None,
-            'sender_username': self.message.sender.username if self.message and self.message.sender else None,
-            'sender_user_type': self.message.sender.user_type if self.message and self.message.sender else None,
-            'sender': {
-                'id': self.message.sender.id,
-                'username': self.message.sender.username,
-                'user_type': self.message.sender.user_type
-            } if self.message and self.message.sender else None,
-            'message': {
-                'id': self.message.id,
-                'content': self.message.content,
-                'created_at': self.message.created_at.isoformat() if self.message else None
-            } if self.message else None,
-            'content': self.message.content if self.message else '',
-            'created_at': self.message.created_at.isoformat() if self.message else None,
-            'is_read': self.is_read,
-            'read_at': self.read_at.isoformat() if self.read_at else None
-        }
 
 class TeacherReview(db.Model):
     """学生对教师的评价"""

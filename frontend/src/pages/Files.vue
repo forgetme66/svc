@@ -256,9 +256,9 @@
           />
         </el-card>
       </el-main>
-        </el-container>
-      </el-container>
-    </div>
+    </el-container>
+    </el-container>
+  </div>
   </template>
 
 <script setup>
@@ -302,6 +302,22 @@ const currentPage = ref(1)
 const pageSize = ref(10)
 const total = ref(0)
 const searchKeyword = ref('')
+
+const goToProfile = () => {
+  router.push('/profile')
+}
+
+const handleLogout = async () => {
+  try {
+    await authAPI.logout()
+  } catch (error) {
+    console.error('登出请求失败:', error)
+  } finally {
+    authStore.clearAuth()
+    ElMessage.success('已退出登录')
+    router.push('/login')
+  }
+}
 
 const handleFileSelect = (file) => {
   selectedFile.value = file.raw || file
@@ -473,21 +489,6 @@ const getSubmissionStageLabel = (stage) => {
   return labels[stage] || stage
 }
 
-const goToProfile = () => {
-  router.push('/profile')
-}
-
-const handleLogout = async () => {
-  try {
-    await authAPI.logout()
-    authStore.clearAuth()
-    router.push('/login')
-  } catch (error) {
-    console.error('Logout error:', error)
-    authStore.clearAuth()
-    router.push('/login')
-  }
-}
 
 // 导航到消息箱
 const goToInbox = () => {
@@ -579,12 +580,16 @@ onMounted(() => {
     border-right: 1px solid #e0e0e0;
   }
 
-  :deep(.el-main) {
+  .el-main {
     padding: 20px;
     overflow-y: auto;
   }
 
-  .upload-card {
+  .upload-card,
+  .files-card {
+    border-radius: 8px;
+    box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+
     .card-header {
       display: flex;
       justify-content: space-between;
@@ -592,12 +597,12 @@ onMounted(() => {
       font-weight: bold;
       color: #333;
     }
+  }
 
-    .upload-area {
-      :deep(.el-upload-dragger) {
-        width: 100%;
-        height: 200px;
-      }
+  .upload-card {
+    .upload-area :deep(.el-upload-dragger) {
+      width: 100%;
+      height: 200px;
     }
 
     .upload-options {
@@ -607,13 +612,7 @@ onMounted(() => {
 
   .files-card {
     .card-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      font-weight: bold;
-      color: #333;
-
-      :deep(.el-input-group) {
+      .el-input-group {
         margin-left: auto;
       }
     }

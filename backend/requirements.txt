@@ -5,3 +5,4 @@ Flask-CORS==4.0.0
 python-dotenv==1.0.0
 Werkzeug==3.0.1
 cryptography==41.0.7
+Flask-Migrate==4.0.4
