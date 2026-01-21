@@ -226,7 +226,7 @@ class Message(db.Model):
     __tablename__ = 'messages'
 
     id = db.Column(db.Integer, primary_key=True)
-    question_id = db.Column(db.Integer, db.ForeignKey('questions.id'), nullable=False, index=True)
+    question_id = db.Column(db.Integer, db.ForeignKey('questions.id'), nullable=True, index=True)  # 修改为nullable=True，允许公告类消息
     sender_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     content = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
@@ -254,7 +254,9 @@ class Message(db.Model):
         }
 
     def __repr__(self):
-        return f'<Message {self.id} in Question {self.question_id}>'
+        return f'<Message {self.id} in Question {self.question_id or "Broadcast"}>'
+
+
 class TeacherStudent(db.Model):
     """教师-学生关系表"""
     __tablename__ = 'teacher_students'
@@ -305,7 +307,40 @@ class PasswordReset(db.Model):
     def __repr__(self):
         return f'<PasswordReset user_id={self.user_id}>'
 
+class MessageRecipient(db.Model):
+    """消息接收者模型 - 用于跟踪每个接收者的阅读状态"""
+    __tablename__ = 'message_recipients'
 
+    id = db.Column(db.Integer, primary_key=True)
+    message_id = db.Column(db.Integer, db.ForeignKey('messages.id'), nullable=False)
+    recipient_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    is_read = db.Column(db.Boolean, default=False, nullable=False, server_default='0')
+    read_at = db.Column(db.DateTime)  # 首次阅读时间
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # 关系
+    message = db.relationship('Message', backref=db.backref('recipients', lazy=True))
+    recipient = db.relationship('User', backref=db.backref('received_messages', lazy=True))
+
+    __table_args__ = (
+        db.Index('ix_message_recipients_message_id', 'message_id'),
+        db.Index('ix_message_recipients_recipient_id', 'recipient_id'),
+        db.UniqueConstraint('message_id', 'recipient_id', name='unique_message_recipient'),
+    )
+
+    def to_dict(self):
+        """转换为字典"""
+        return {
+            'id': self.id,
+            'message_id': self.message_id,
+            'recipient_id': self.recipient_id,
+            'is_read': self.is_read,
+            'read_at': self.read_at.isoformat() if self.read_at else None,
+            'created_at': self.created_at.isoformat() if self.created_at else ''
+        }
+
+    def __repr__(self):
+        return f'<MessageRecipient message={self.message_id} recipient={self.recipient_id} is_read={self.is_read}>'
 
 class TeacherReview(db.Model):
     """学生对教师的评价"""
